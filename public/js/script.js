@@ -1,4 +1,4 @@
-const moment = require("moment");
+// LIBRARY
 const socket = io();
 
 // USERNAME
@@ -12,12 +12,13 @@ do {
 const textarea = document.querySelector("#textarea");
 const submitBtn = document.querySelector("#submitBtn");
 const commentBox = document.querySelector(".comment__box");
+const typingDiv = document.querySelector(".typing");
 
 // HANDLE BUTTON CLICK
 submitBtn.addEventListener("click", (e) => {
   e.preventDefault();
 
-  const comment = textarea.ariaValueMax;
+  const comment = textarea.value;
 
   if (!comment) {
     return;
@@ -44,6 +45,7 @@ function postComment(comment) {
   broadcastComment(data);
 
   // SYNC WITH MONGODB
+  syncWithDB();
 }
 
 // APPEND TO DOM
@@ -63,7 +65,7 @@ function appendToDom(data) {
     </div>`;
 
   liTag.innerHTML = markup;
-  commentBox.prepend(markup);
+  commentBox.appendChild(markup);
 }
 
 // BROADCAST
@@ -72,6 +74,65 @@ function broadcastComment(data) {
   socket.emit("comment", data);
 }
 
+// RECIEVE EVENT
 socket.on("comment", (data) => {
   appendToDom(data);
 });
+
+// EVENT LISTENER ON TEXTAREA
+textarea.addEventListener("keyup", (e) => {
+  // CREATE EVENT (TO SERVER)
+  socket.emit("typing", { username });
+});
+
+let timerId = null;
+
+// RECIEVE EVENT
+socket.on("typing", (data) => {
+  typingDiv.innerText = `${data.username} is typing...`;
+
+  // DEBOUNCE FUNCTION
+  debounce(function () {
+    typingDiv.innerText = "";
+  }, 1000);
+});
+
+// DEBOUNCE FUNCTION
+function debounce(func, timer) {
+  if (timerId) {
+    clearTimeout(timerId);
+  }
+
+  timerId = setTimeout(() => {
+    func();
+  }, timer);
+}
+
+// SYNC WITH MONGODB
+function syncWithDB(data) {
+  fetch("/api/comments", {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => response.json())
+    .then((result) => {
+      console.log(result);
+    });
+}
+
+// FETCH COMMENTS FROM DB ON WINOW LOAD
+function fetchComments() {
+  fetch("/api/comments")
+    .then((res) => res.json())
+    .then((result) => {
+      result?.forEach((comment) => {
+        comment.time = comment.createdAt;
+        appendToDom(comment);
+      });
+    });
+}
+
+window.onload = fetchComments();
